@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Framed Photo App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+            padding: 40px;
+            text-align: center;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            border: 1px solid #999;
+            border-radius: 5px;
+            background: white;
+        }
+
+        .btn-download {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+            .btn-download:hover {
+                background-color: #005f73;
+            }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        img {
+            max-width: 100%;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Upload and Frame Your Photo</h1>
+
+    <input type="file" id="upload" accept="image/*">
+    <br><br>
+
+    <canvas id="canvas"></canvas>
+    <br>
+
+    <button class="btn-download" id="generateBtn">🖼 Generate HQ Framed Image</button>
+
+    <br><br>
+    <img id="resultImage" />
+    <br>
+    <a id="downloadLink" class="btn-download" download style="display: none;">⬇️ Download HQ Image</a>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const upload = document.getElementById('upload');
+        const generateBtn = document.getElementById('generateBtn');
+        const resultImage = document.getElementById('resultImage');
+        const downloadLink = document.getElementById('downloadLink');
+
+        const frame = new Image();
+        let photo = new Image();
+        let imageFileBlob = null;
+
+        let photoX = 0, photoY = 0;
+        let isDragging = false;
+        let offsetX = 0, offsetY = 0;
+        let imageScale = 1;
+
+        // 📌 Load frame first and set canvas size
+        frame.onload = () => {
+            canvas.width = frame.width;
+            canvas.height = frame.height;
+            draw();  // Draw frame only
+        };
+        frame.src = "/static/frame.png"; // ✅ Make sure this is original resolution
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const scaledWidth = photo.width * imageScale;
+            const scaledHeight = photo.height * imageScale;
+            ctx.drawImage(photo, photoX, photoY, scaledWidth, scaledHeight);
+            ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+        }
+
+        upload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            imageFileBlob = file;
+
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                photo.onload = draw;
+                photo.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            offsetX = e.offsetX - photoX;
+            offsetY = e.offsetY - photoY;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                photoX = e.offsetX - offsetX;
+                photoY = e.offsetY - offsetY;
+                draw();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => isDragging = false);
+        canvas.addEventListener('mouseleave', () => isDragging = false);
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoom = e.deltaY * -0.001;
+            imageScale += zoom;
+            imageScale = Math.min(Math.max(imageScale, 0.2), 5);
+            draw();
+        });
+
+        generateBtn.addEventListener('click', async () => {
+            if (!imageFileBlob) {
+                alert("Please upload an image first.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", imageFileBlob);
+            formData.append("x", photoX);
+            formData.append("y", photoY);
+            formData.append("scale", imageScale);
+            formData.append("canvas_width", canvas.width);
+            formData.append("canvas_height", canvas.height);
+
+            try {
+                const res = await fetch('/generate', {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    console.error("Backend error:", errorData);
+                    alert("Server error: " + errorData.error);
+                    return;
+                }
+
+                const data = await res.json();
+                const imgUrl = data.url;
+
+                // Show image preview
+                resultImage.src = imgUrl;
+                resultImage.style.display = "block";
+
+                // Show download button
+                downloadLink.href = imgUrl;
+                downloadLink.style.display = "inline-block";
+
+            } catch (err) {
+                console.error("❌ JS fetch failed:", err);
+                alert("Something went wrong on the client side.");
+            }
+        });
+    </script>
+
+</body>
+</html>
