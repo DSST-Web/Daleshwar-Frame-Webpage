@@ -1,4 +1,4 @@
-# app/main.py
+# app/main.pya
 
 from fastapi import FastAPI, Request, File, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
